@@ -164,10 +164,11 @@ def main(
         log: Param("Log file name", str)='log',
         sched_type: Param("LR schedule type", str)='one_cycle',
         ann_start: Param("Mixup", float)=-1.0,
+        splits: Param("BatchNorm Splits")=1
         ):
 
     acc = np.array(
-        [train(gpu,woof,lr,size,alpha,mom,eps,epochs,bs,mixup,opt,arch,sa,sym,dump,lrfinder,log,sched_type,ann_start)
+        [train(gpu,woof,lr,size,alpha,mom,eps,epochs,bs,mixup,opt,arch,sa,sym,dump,lrfinder,log,sched_type,ann_start,splits)
                 for i in range(run)])
     
     print(acc)
