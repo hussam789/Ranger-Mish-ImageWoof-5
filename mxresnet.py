@@ -159,7 +159,7 @@ class MXResNet(nn.Sequential):
     def __init__(self, expansion, layers, c_in=3, c_out=1000, sa = False, sym= False, splits=1):
         stem = []
         sizes = [c_in,32,64,64]  #modified per Grankin
-                for i in range(3):
+        for i in range(3):
             stem.append(conv_layer(sizes[i], sizes[i+1], stride=2 if i==0 else 1, splits=splits))
             #nf = filt_sz(c_in*9)
             #stem.append(conv_layer(c_in, nf, stride=2 if i==1 else 1))
