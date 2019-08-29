@@ -25,6 +25,33 @@ class Mish(nn.Module):
         
 
 
+class GhostBatchNorm(BatchNorm):
+    def __init__(self, num_features, num_splits=16, **kw):
+        super().__init__(num_features, **kw)
+        self.num_splits = num_splits
+        self.register_buffer('running_mean', torch.zeros(num_features * self.num_splits))
+        self.register_buffer('running_var', torch.ones(num_features * self.num_splits))
+
+    def train(self, mode=True):
+        if (self.training is True) and (mode is False):  # lazily collate stats when we are going to use them
+            self.running_mean = torch.mean(self.running_mean.view(self.num_splits, self.num_features), dim=0).repeat(
+                self.num_splits)
+            self.running_var = torch.mean(self.running_var.view(self.num_splits, self.num_features), dim=0).repeat(
+                self.num_splits)
+        return super().train(mode)
+
+    def forward(self, input):
+        N, C, H, W = input.shape
+        if self.training or not self.track_running_stats:
+            return F.batch_norm(
+                input.view(-1, C * self.num_splits, H, W), self.running_mean, self.running_var,
+                self.weight.repeat(self.num_splits), self.bias.repeat(self.num_splits),
+                True, self.momentum, self.eps).view(N, C, H, W)
+        else:
+            return F.batch_norm(
+                input, self.running_mean[:self.num_features], self.running_var[:self.num_features],
+                self.weight, self.bias, False, self.momentum, self.eps)
+
     
 
 #Unmodified from https://github.com/fastai/fastai/blob/5c51f9eabf76853a89a9bc5741804d2ed4407e49/fastai/layers.py
@@ -98,27 +125,30 @@ def conv(ni, nf, ks=3, stride=1, bias=False):
 
 def noop(x): return x
 
-def conv_layer(ni, nf, ks=3, stride=1, zero_bn=False, act=True):
-    bn = nn.BatchNorm2d(nf)
+def conv_layer(ni, nf, ks=3, stride=1, zero_bn=False, act=True, splits=1):
+    if splits == 1:
+        bn = nn.BatchNorm2d(nf)
+    else:
+        bn = GhostBatchNorm(nf, num_splits=splits)
     nn.init.constant_(bn.weight, 0. if zero_bn else 1.)
     layers = [conv(ni, nf, ks, stride=stride), bn]
     if act: layers.append(act_fn)
     return nn.Sequential(*layers)
 
 class ResBlock(Module):
-    def __init__(self, expansion, ni, nh, stride=1,sa=False, sym=False):
+    def __init__(self, expansion, ni, nh, stride=1,sa=False, sym=False, splits=1):
         nf,ni = nh*expansion,ni*expansion
-        layers  = [conv_layer(ni, nh, 3, stride=stride),
-                   conv_layer(nh, nf, 3, zero_bn=True, act=False)
+        layers  = [conv_layer(ni, nh, 3, stride=stride, splits=splits),
+                   conv_layer(nh, nf, 3, zero_bn=True, act=False, splits=splits)
         ] if expansion == 1 else [
-                   conv_layer(ni, nh, 1),
-                   conv_layer(nh, nh, 3, stride=stride),
-                   conv_layer(nh, nf, 1, zero_bn=True, act=False)
+                   conv_layer(ni, nh, 1, splits=splits),
+                   conv_layer(nh, nh, 3, stride=stride, splits=splits),
+                   conv_layer(nh, nf, 1, zero_bn=True, act=False, splits=splits)
         ]
         self.sa = SimpleSelfAttention(nf,ks=1,sym=sym) if sa else noop
         self.convs = nn.Sequential(*layers)
         # TODO: check whether act=True works better
-        self.idconv = noop if ni==nf else conv_layer(ni, nf, 1, act=False)
+        self.idconv = noop if ni==nf else conv_layer(ni, nf, 1, act=False, splits=splits)
         self.pool = noop if stride==1 else nn.AvgPool2d(2, ceil_mode=True)
 
     def forward(self, x): return act_fn(self.sa(self.convs(x)) + self.idconv(self.pool(x)))
@@ -126,17 +156,17 @@ class ResBlock(Module):
 def filt_sz(recep): return min(64, 2**math.floor(math.log2(recep*0.75)))
 
 class MXResNet(nn.Sequential):
-    def __init__(self, expansion, layers, c_in=3, c_out=1000, sa = False, sym= False):
+    def __init__(self, expansion, layers, c_in=3, c_out=1000, sa = False, sym= False, splits=1):
         stem = []
         sizes = [c_in,32,64,64]  #modified per Grankin
         for i in range(3):
-            stem.append(conv_layer(sizes[i], sizes[i+1], stride=2 if i==0 else 1))
+            stem.append(conv_layer(sizes[i], sizes[i+1], stride=2 if i==0 else 1, splits=splits))
             #nf = filt_sz(c_in*9)
             #stem.append(conv_layer(c_in, nf, stride=2 if i==1 else 1))
             #c_in = nf
 
         block_szs = [64//expansion,64,128,256,512]
-        blocks = [self._make_layer(expansion, block_szs[i], block_szs[i+1], l, 1 if i==0 else 2, sa = sa if i in[len(layers)-4] else False, sym=sym)
+        blocks = [self._make_layer(expansion, block_szs[i], block_szs[i+1], l, 1 if i==0 else 2, sa = sa if i in[len(layers)-4] else False, sym=sym, splits=splits)
                   for i,l in enumerate(layers)]
         super().__init__(
             *stem,
@@ -149,7 +179,7 @@ class MXResNet(nn.Sequential):
 
     def _make_layer(self, expansion, ni, nf, blocks, stride, sa=False, sym=False):
         return nn.Sequential(
-            *[ResBlock(expansion, ni if i==0 else nf, nf, stride if i==0 else 1, sa if i in [blocks -1] else False,sym)
+            *[ResBlock(expansion, ni if i==0 else nf, nf, stride if i==0 else 1, sa if i in [blocks -1] else False,sym, splits=splits)
               for i in range(blocks)])
 
 def mxresnet(expansion, n_layers, name, pretrained=False, **kwargs):
