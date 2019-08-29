@@ -177,7 +177,7 @@ class MXResNet(nn.Sequential):
         )
         init_cnn(self)
 
-    def _make_layer(self, expansion, ni, nf, blocks, stride, sa=False, sym=False):
+    def _make_layer(self, expansion, ni, nf, blocks, stride, sa=False, sym=False, splits=1):
         return nn.Sequential(
             *[ResBlock(expansion, ni if i==0 else nf, nf, stride if i==0 else 1, sa if i in [blocks -1] else False,sym, splits=splits)
               for i in range(blocks)])
