@@ -80,6 +80,7 @@ def train(
         log: Param("Log file name", str)='log',
         sched_type: Param("LR schedule type", str)='one_cycle',
         ann_start: Param("Mixup", float)=-1.0,
+        splits: Param("BatchNorm Splits")=1
         ):
     "Distributed training of Imagenette."
     
@@ -111,7 +112,7 @@ def train(
     
     log_cb = partial(CSVLogger,filename=log)
     
-    learn = (Learner(data, m(c_out=10, sa=sa,sym=sym), wd=1e-2, opt_func=opt_func,
+    learn = (Learner(data, m(c_out=10, sa=sa,sym=sym, splits=splits), wd=1e-2, opt_func=opt_func,
              metrics=[accuracy,top_k_accuracy],
              bn_wd=False, true_wd=True,
              loss_func = LabelSmoothingCrossEntropy(),
