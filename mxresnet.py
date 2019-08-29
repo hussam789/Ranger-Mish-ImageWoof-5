@@ -167,7 +167,7 @@ class MXResNet(nn.Sequential):
             stem.append(conv_layer(sizes[i], sizes[i+1], stride=2 if i==0 else 1, splits=splits))
 
         block_szs = [64//expansion,64,128,256,512]
-        blocks = [self._make_layer(expansion, block_szs[i], block_szs[i+1], l, 1 if i==0 else 2, sa = sa if i in[len(layers)-4] else False, sym=sym)
+        blocks = [self._make_layer(expansion, block_szs[i], block_szs[i+1], l, 1 if i==0 else 2, sa = sa if i in[len(layers)-4] else False, sym=sym, bn_splits=splits)
                   for i,l in enumerate(layers)]
         super().__init__(
             *stem,
