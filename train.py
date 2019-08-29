@@ -164,7 +164,7 @@ def main(
         log: Param("Log file name", str)='log',
         sched_type: Param("LR schedule type", str)='one_cycle',
         ann_start: Param("Mixup", float)=-1.0,
-        splits: Param("BatchNorm Splits")=1
+        splits: Param("BatchNorm Splits", int)=1
         ):
 
     acc = np.array(
