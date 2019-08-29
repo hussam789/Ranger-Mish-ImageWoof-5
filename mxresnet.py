@@ -25,7 +25,7 @@ class Mish(nn.Module):
         
 
 
-class GhostBatchNorm(BatchNorm):
+class GhostBatchNorm(nn.BatchNorm):
     def __init__(self, num_features, num_splits=16, **kw):
         super().__init__(num_features, **kw)
         self.num_splits = num_splits
