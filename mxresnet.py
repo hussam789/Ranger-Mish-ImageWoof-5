@@ -156,6 +156,10 @@ class ResBlock(Module):
 def filt_sz(recep): return min(64, 2**math.floor(math.log2(recep*0.75)))
 
 class MXResNet(nn.Sequential):
+    def _make_layer(self, expansion, ni, nf, blocks, stride, sa=False, sym=False, splits=1):
+        return nn.Sequential(
+            *[ResBlock(expansion, ni if i==0 else nf, nf, stride if i==0 else 1, sa if i in [blocks -1] else False,sym, splits=splits)
+              for i in range(blocks)])
     def __init__(self, expansion, layers, c_in=3, c_out=1000, sa = False, sym= False, splits=1):
         stem = []
         sizes = [c_in,32,64,64]  #modified per Grankin
@@ -176,11 +180,6 @@ class MXResNet(nn.Sequential):
             nn.Linear(block_szs[-1]*expansion, c_out),
         )
         init_cnn(self)
-
-    def _make_layer(self, expansion, ni, nf, blocks, stride, sa=False, sym=False, splits=1):
-        return nn.Sequential(
-            *[ResBlock(expansion, ni if i==0 else nf, nf, stride if i==0 else 1, sa if i in [blocks -1] else False,sym, splits=splits)
-              for i in range(blocks)])
 
 def mxresnet(expansion, n_layers, name, pretrained=False, **kwargs):
     model = MXResNet(expansion, n_layers, **kwargs)
